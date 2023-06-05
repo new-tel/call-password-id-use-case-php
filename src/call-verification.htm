@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Call Password ID example</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container" style="max-width:440px;">
+    <div class="card mt-4">
+        <div class="card-header">Call Password ID example</div>
+        <form id="exampleForm" class="card-body">
+            <label for="phoneNumber" class="form-label">Номер мобильного телефона</label>
+            <input type="tel" id="phoneNumber" name="phoneNumber" class="form-control" pattern="[1-9]\d{6,14}"
+                   placeholder="7xxxxxxxxxx" required autofocus>
+            <div class="form-text">Для верификации номера телефона вам будет необходимо совершить звонок с
+                указанного номера.
+            </div>
+            <button type="submit" class="btn btn-primary mt-2">Далее</button>
+        </form>
+    </div>
+</div>
+<script>
+    'use strict';
+    const cardBody = document.querySelector('.card-body');
+
+    (function () {
+
+        /**
+         * Event listener on form submit.
+         */
+        document.getElementById('exampleForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            try {
+                fetch(`${window.location.href}?action=start`, {
+                    method: 'POST',
+                    body: new FormData(this),
+                }).then(response => response.json())
+                    .then(data => {
+                        const {clientNumber, confirmationNumber, qrCodeUri} = data;
+                        callConfirmationCheck(data);
+
+                        cardBody.innerHTML = `
+                                <p>Вам необходимо совершить звонок с указанного номера ${clientNumber} на номер
+                                <a href="tel:${confirmationNumber}">${confirmationNumber}</a></p>
+                                <p class="d-none d-sm-block text-center"><img src="${qrCodeUri}" width="150" height="150" alt="QR code"></p>
+                                <p class="text-center">Ожидаем вашего звонка в течение <span id="timer"></span> сек.</p>`;
+                    })
+                    .catch(() => {
+                        cardBody.innerHTML = `<p class="text-center">При обработки запроса произошла ошибка.</p>`
+                    });
+            } catch (error) {
+                console.error(error);
+            }
+        });
+
+    })();
+
+    /**
+     * Performs periodic checks to get call confirmation status.
+     * @param {Object} callData
+     */
+    function callConfirmationCheck(callData) {
+        const {clientNumber, callId} = callData;
+        const formData = new FormData();
+        formData.append('callId', callId);
+
+        try {
+            fetch(`${window.location.href}?action=check`, {
+                method: 'POST',
+                body: formData,
+            }).then(response => response.json())
+                .then(data => {
+                    const {flag, timeout} = data;
+
+                    if (timeout > 0) {
+                        document.getElementById('timer').innerHTML = timeout;
+
+                        if (flag) {
+                            cardBody.innerHTML = `<p class="text-center">Указанный номер телефона ${clientNumber} успешно верифицирован.</p>`;
+                        } else {
+                            setTimeout(() => callConfirmationCheck(callData), 1000);
+                        }
+                    } else {
+                        cardBody.innerHTML = `<p class="text-center">Время ожидания звонка истекло, номер ${clientNumber} не верифицирован.</p>`;
+                    }
+                });
+        } catch (error) {
+            console.error(error);
+        }
+    }
+</script>
+</body>
+</html>
