@@ -14,7 +14,7 @@ const API_SIGNATURE_KEY = '';
  * @var int Timeout value in seconds for call verification.
  * Possible values: min 30, max 120, default 60.
  */
-const TIMEOUT = 30;
+const TIMEOUT = 60;
 
 /**
  * Generate token for authentication New-tel API.
@@ -47,11 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($_GET['action']) {
         case 'start':
             // Start the call verification process.
-            session_start();
-
             $requestBody = json_encode([
                 'clientNumber' => $_POST['phoneNumber'],
-                'callbackLink' => sprintf("https://%s/?action=callback&session_id=%s", $_SERVER['HTTP_HOST'], session_id()),
+                'callbackLink' => sprintf("https://%s/?action=callback", $_SERVER['HTTP_HOST']),
                 'timeout' => TIMEOUT,
             ]);
 
@@ -74,6 +72,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($decodedResponse['status'] === 'success') {
                 $callId = $decodedResponse['data']['callDetails']['callId'];
+
+                session_id($callId);
+                session_start();
+
                 $_SESSION[$callId] = ['timestamp' => time() + TIMEOUT, 'flag' => false];
 
                 echo json_encode($decodedResponse['data']['callDetails']);
@@ -82,20 +84,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         case 'check':
             // Check the call confirmation status.
+            session_id($_POST['callId']);
             session_start();
+
             $timeout = $_SESSION[$_POST['callId']]['timestamp'] - time();
             $flag = $_SESSION[$_POST['callId']]['flag'];
+
             echo json_encode(['timeout' => $timeout, 'flag' => $flag]);
             break;
 
         case 'callback':
             // Process callback from call verification.
-            session_id($_GET['session_id']);
+            $body = json_decode(file_get_contents('php://input'), true);
+
+            session_id($body['callId']);
             session_start();
 
-            $jsonData = file_get_contents('php://input');
-            $data = json_decode($jsonData, true);
-            $_SESSION[$data['callId']]['flag'] = true;
+            $_SESSION[$body['callId']]['flag'] = true;
             break;
     }
 }
